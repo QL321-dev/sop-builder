@@ -152,6 +152,7 @@ var DRAFT_KEY = "sop_draft_v1";
 })();
 
 var draftDirty = false;
+var _autoT = null;
 function saveDraft(){
   try{
     if(typeof localStorage === "undefined") return;
@@ -165,7 +166,11 @@ function saveDraft(){
   }catch(e){}
 }
 if(typeof document !== "undefined" && document.addEventListener){
-  document.addEventListener("input", function(){ draftDirty = true; });
+  document.addEventListener("input", function(){
+    draftDirty = true;
+    if(_autoT) clearTimeout(_autoT);
+    _autoT = setTimeout(saveDraft, 2000); /* auto-save 2s after last keystroke */
+  });
 }
 if(typeof window !== "undefined" && window.addEventListener){
   window.addEventListener("beforeunload", function(e){
@@ -229,7 +234,7 @@ function renderProgress(){
     var c = document.createElement("span");
     var miss = s.required && !sectionFilled(s) && i!==state.cur;
     c.className = "chip" + (i===state.cur?" cur":(sectionFilled(s)?" done":(miss?" miss":""))) + (s.required?"":" opt");
-    c.textContent = (i+1)+". "+s.title + (s.required?"":" (opt)");
+    c.textContent = (i===0 ? "" : i + ". ") + s.title + (s.required?"":" (opt)");
     c.onclick = function(){ state.cur = i; render(); };
     p.appendChild(c);
   });

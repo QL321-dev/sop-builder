@@ -8,7 +8,7 @@ A single-file HTML tool that walks you through writing a proper Standard Operati
 
 - One HTML file. Double-click to open in any browser, or host it anywhere (GitHub Pages works out of the box)
 - Guided 12-section skeleton: current section highlighted, filled sections turn blue, **missing required sections flash orange** — click any chip to jump
-- Drafts auto-save to your browser's localStorage when you click **Save Draft**; reopening the page restores your work. Nothing is ever sent anywhere — it's all on your own machine
+- Drafts auto-save to your browser's localStorage a moment after you stop typing (and there's a **Save Draft** button for the impatient); reopening the page restores your work. Nothing is ever sent anywhere — it's all on your own machine
 - Exports a Markdown file (`sop.md`) that pastes cleanly into Confluence, Notion, Obsidian, Typora, Google Docs, and most other editors
 
 ## The skeleton (12 sections: 9 required + 3 optional)
