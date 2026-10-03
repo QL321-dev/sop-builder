@@ -147,14 +147,27 @@ var DRAFT_KEY = "sop_draft_v1";
       if(!state.text || typeof state.text !== "object") state.text = {};
       if(!state.rows || typeof state.rows !== "object") state.rows = {};
       if(!state.steps || !state.steps.length) state.steps = [ newStep() ];
+      state.steps = state.steps.map(function(st){
+        if(!st || typeof st !== "object") return newStep();
+        if(typeof st.title !== "string") st.title = "";
+        if(typeof st.text !== "string") st.text = "";
+        st.tree = normTree(st.tree);
+        st.hasTree = !!st.hasTree;
+        return st;
+      });
       if(typeof state.cur !== "number" || state.cur < 0 || state.cur > SECTIONS.length) state.cur = 0;
     }
-  }catch(e){}
+  }catch(e){ var el = document.getElementById("draftStatus"); if(el) el.textContent = "Draft load failed"; }
 })();
 
 var draftDirty = false;
-var _autoT = null;
 var _lastFk = null;
+function normTree(nodes){
+  if(!Array.isArray(nodes)) return [];
+  return nodes.filter(function(nd){ return nd && typeof nd === "object"; }).map(function(nd){
+    return { text: (typeof nd.text === "string") ? nd.text : "", children: normTree(nd.children) };
+  });
+}
 function saveDraft(){
   try{
     if(typeof localStorage === "undefined") return;
@@ -170,14 +183,8 @@ function saveDraft(){
     if(el2) el2.textContent = "Save failed (browser storage blocked)";
   }
 }
-function scheduleSave(){
-  draftDirty = true;
-  if(_autoT) clearTimeout(_autoT);
-  _autoT = setTimeout(saveDraft, 2000); /* auto-save 2s after last change */
-}
 if(typeof document !== "undefined" && document.addEventListener){
-  document.addEventListener("input", scheduleSave);
-  document.addEventListener("click", scheduleSave); /* structural changes too */
+  document.addEventListener("input", function(){ draftDirty = true; });
   document.addEventListener("focusin", function(e){
     var t = e.target;
     if(t && t.dataset && t.dataset.fk) _lastFk = t.dataset.fk;
@@ -250,11 +257,14 @@ function render(){
 function renderProgress(){
   var p = $("progress");
   p.innerHTML = "";
+  var no = 0;
   SECTIONS.forEach(function(s,i){
     var c = document.createElement("span");
     var miss = s.required && !sectionFilled(s) && i!==state.cur;
     c.className = "chip" + (i===state.cur?" cur":(sectionFilled(s)?" done":(miss?" miss":""))) + (s.required?"":" opt");
-    c.textContent = (i===0 ? "" : i + ". ") + s.title + (s.required?"":" (opt)");
+    var num = "";
+    if(i>0 && (s.required || sectionFilled(s))){ no++; num = no + ". "; }
+    c.textContent = num + s.title + (s.required?"":" (opt)");
     c.onclick = function(){ state.cur = i; render(); };
     p.appendChild(c);
   });
@@ -314,7 +324,7 @@ function renderHead(card){
 
   var g2 = document.createElement("div"); g2.className="inline-inputs";
   var d3 = document.createElement("div"); d3.appendChild(mkLabel("Effective Date"));
-  var dateInp = mkInput(hd.date, function(v){ hd.date=v; });
+  var dateInp = mkInput(hd.date, function(v){ hd.date=v; }, "date");
   dateInp.placeholder = "YYYY-MM-DD";
   d3.appendChild(dateInp);
   var d4 = document.createElement("div"); d4.appendChild(mkLabel("Prepared by"));
@@ -364,20 +374,20 @@ function renderRows(sec, card){
         g.appendChild(inp);
       });
       var up = document.createElement("button"); up.className="btndel"; up.textContent="↑"; up.title="Move up";
-      if(ri>0){ up.onclick = function(){ var tmp=rs[ri-1]; rs[ri-1]=rs[ri]; rs[ri]=tmp; redraw(); }; }
+      if(ri>0){ up.onclick = function(){ var tmp=rs[ri-1]; rs[ri-1]=rs[ri]; rs[ri]=tmp; draftDirty = true; redraw(); }; }
       else { up.style.visibility="hidden"; }
       g.appendChild(up);
       var down = document.createElement("button"); down.className="btndel"; down.textContent="↓"; down.title="Move down";
-      if(ri<rs.length-1){ down.onclick = function(){ var tmp=rs[ri+1]; rs[ri+1]=rs[ri]; rs[ri]=tmp; redraw(); }; }
+      if(ri<rs.length-1){ down.onclick = function(){ var tmp=rs[ri+1]; rs[ri+1]=rs[ri]; rs[ri]=tmp; draftDirty = true; redraw(); }; }
       else { down.style.visibility="hidden"; }
       g.appendChild(down);
       var del = document.createElement("button"); del.className="btndel"; del.textContent="✕"; del.title="Delete this row";
-      del.onclick = function(){ rs.splice(ri,1); if(!rs.length) rs.push(new Array(sec.cols.length).fill("")); redraw(); };
+      del.onclick = function(){ rs.splice(ri,1); if(!rs.length) rs.push(new Array(sec.cols.length).fill("")); draftDirty = true; redraw(); };
       g.appendChild(del);
       box.appendChild(g);
     });
     var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add row";
-    add.onclick = function(){ rs.push(new Array(sec.cols.length).fill("")); redraw(); };
+    add.onclick = function(){ rs.push(new Array(sec.cols.length).fill("")); draftDirty = true; redraw(); };
     box.appendChild(add);
     _restoreFocus(box, fk);
   }
@@ -398,16 +408,16 @@ function renderSteps(sec, card){
       var t = document.createElement("span"); t.className="stitle"; t.textContent = "Step " + (si+1);
       head.appendChild(t);
       var up = document.createElement("button"); up.className="btndel"; up.textContent="↑"; up.title="Move up";
-      if(si>0){ up.onclick = function(){ var tmp=state.steps[si-1]; state.steps[si-1]=state.steps[si]; state.steps[si]=tmp; redraw(); }; }
+      if(si>0){ up.onclick = function(){ var tmp=state.steps[si-1]; state.steps[si-1]=state.steps[si]; state.steps[si]=tmp; draftDirty = true; redraw(); }; }
       else { up.style.visibility="hidden"; }
       head.appendChild(up);
       var down = document.createElement("button"); down.className="btndel"; down.textContent="↓"; down.title="Move down";
-      if(si<state.steps.length-1){ down.onclick = function(){ var tmp=state.steps[si+1]; state.steps[si+1]=state.steps[si]; state.steps[si]=tmp; redraw(); }; }
+      if(si<state.steps.length-1){ down.onclick = function(){ var tmp=state.steps[si+1]; state.steps[si+1]=state.steps[si]; state.steps[si]=tmp; draftDirty = true; redraw(); }; }
       else { down.style.visibility="hidden"; }
       head.appendChild(down);
       var spacer = document.createElement("span"); spacer.style.flex="1"; head.appendChild(spacer);
       var del = document.createElement("button"); del.className="btndel"; del.textContent="✕ Delete step";
-      del.onclick = function(){ state.steps.splice(si,1); if(!state.steps.length) state.steps.push(newStep()); redraw(); };
+      del.onclick = function(){ state.steps.splice(si,1); if(!state.steps.length) state.steps.push(newStep()); draftDirty = true; redraw(); };
       head.appendChild(del);
       sb.appendChild(head);
 
@@ -422,23 +432,23 @@ function renderSteps(sec, card){
       if(st.hasTree && !st.tree.length){ st.hasTree=false; }
       if(st.hasTree){
         var treeBox = document.createElement("div"); treeBox.className="tree";
-        renderTree(st.tree, treeBox, function(){ redraw(); }, "t:"+si+":");
+        renderTree(st.tree, treeBox, function(){ draftDirty = true; redraw(); }, "t:"+si+":");
         sb.appendChild(treeBox);
         var bt = document.createElement("div");
         var delTree = document.createElement("button"); delTree.className="btn small"; delTree.textContent="－ Remove hierarchy";
         delTree.style.marginLeft="8px";
-        delTree.onclick = function(){ st.hasTree=false; st.tree=[]; redraw(); };
+        delTree.onclick = function(){ st.hasTree=false; st.tree=[]; draftDirty = true; redraw(); };
         bt.appendChild(delTree);
         sb.appendChild(bt);
       } else {
         var addTree = document.createElement("button"); addTree.className="btn small"; addTree.textContent="＋ Add hierarchy";
-        addTree.onclick = function(){ st.hasTree=true; st.tree=[newTreeNode()]; redraw(); };
+        addTree.onclick = function(){ st.hasTree=true; st.tree=[newTreeNode()]; draftDirty = true; redraw(); };
         sb.appendChild(addTree);
       }
       box.appendChild(sb);
     });
     var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add step";
-    add.onclick = function(){ state.steps.push(newStep()); redraw(); };
+    add.onclick = function(){ state.steps.push(newStep()); draftDirty = true; redraw(); };
     box.appendChild(add);
     _restoreFocus(box, fk);
   }
@@ -506,7 +516,7 @@ function renderFinal(area){
   card.appendChild(pre);
 
   var btns = document.createElement("div");
-  var dl = document.createElement("button"); dl.className="btn primary"; dl.textContent="⬇ Export sop.md";
+  var dl = document.createElement("button"); dl.className="btn primary"; dl.textContent="⬇ Export MD";
   dl.onclick = function(){
     var md = buildMD();
     var miss2 = SECTIONS.filter(function(s){ return s.required && !sectionFilled(s); }).map(function(s){ return s.title; });

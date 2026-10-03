@@ -7,13 +7,14 @@ A single-file HTML tool that walks you through writing a proper Standard Operati
 ## What it is
 
 - One HTML file. Double-click to open in any browser, or host it anywhere (GitHub Pages works out of the box)
-- Guided 12-section skeleton: current section highlighted, filled sections turn blue, **missing required sections flash orange** — click any chip to jump
-- Drafts auto-save to your browser's localStorage a moment after you stop typing (and there's a **Save Draft** button for the impatient); reopening the page restores your work. Nothing is ever sent anywhere — it's all on your own machine
-- Exports a Markdown file (`sop.md`) that pastes cleanly into Confluence, Notion, Obsidian, Typora, Google Docs, and most other editors
+- Guided 12-section skeleton: current section highlighted, filled sections turn blue, **missing required sections show orange** — click any chip to jump
+- Drafts are written to your browser's localStorage only when you click **Save Draft**; reopening the page restores your work. Nothing is ever sent anywhere — it's all on your own machine
+- Exports a Markdown file named after the process name (illegal characters replaced, truncated to 60 characters; `sop.md` if unnamed) that pastes cleanly into Confluence, Notion, Obsidian, Typora, Google Docs, and most other editors
+- See [sample-sop.md](sample-sop.md) for an example of the exported output
 
 ## The skeleton (12 sections: 9 required + 3 optional)
 
-The structure follows internationally accepted SOP conventions — FDA document-control expectations for SOPs, ISO 9001 requirements for documented procedures, and the UK NHS SOP template structure:
+The skeleton borrows from internationally used SOP templates — most directly the UK NHS SOP template structure, with FDA document-control expectations for SOPs and ISO 9001 requirements for documented procedures as background references:
 
 | # | Section | Required | What goes in it | Export format |
 |---|---|---|---|---|
@@ -39,6 +40,7 @@ References and Related Documents are deliberately separate: the former are gover
 - Steps export as `### Step N: title` + description + indented nested lists
 - If required sections are missing, you get a warning listing them before export (you can force-export after confirming)
 - The exported file ends with a fixed review note: *"Review this document every 12 months, or update it promptly whenever policies change."*
+- Sections are separated by `---` horizontal rules with a blank line on each side
 
 ## What it deliberately does NOT cover
 
