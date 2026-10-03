@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOP Template Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5; color: #222; line-height: 1.6;
+  }
+  #app { max-width: 880px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 22px; color: #1a4f9c; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 18px; }
+
+  /* Progress bar */
+  #progress { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+  .chip {
+    padding: 4px 10px; border-radius: 14px; font-size: 12px;
+    background: #fff; border: 1px solid #d5dbe3; color: #666; cursor: pointer; user-select: none;
+  }
+  .chip.opt { border-style: dashed; }
+  .chip.cur { background: #1a5eb8; border-color: #1a5eb8; color: #fff; }
+  .chip.done { background: #e3edfb; border-color: #b7d0f2; color: #1a5eb8; }
+  .chip.miss { background: #fdf3e7; border-color: #e8b06c; color: #b06000; }
+
+  /* Cards */
+  .card { background: #fff; border-radius: 10px; padding: 24px 28px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card h2 { font-size: 19px; color: #1a4f9c; margin-bottom: 4px; }
+  .req { color: #d33; font-size: 12px; font-weight: normal; margin-left: 8px; }
+
+  label { display: block; font-size: 14px; color: #444; margin: 14px 0 4px; font-weight: bold; }
+  input[type=text], input[type=date], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid #ccd3dd; border-radius: 6px;
+    font-size: 14px; font-family: inherit; background: #fff;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #1a5eb8; }
+  .inline-inputs { display: flex; gap: 12px; flex-wrap: wrap; }
+  .inline-inputs > div { flex: 1; min-width: 180px; }
+
+  /* Row editor */
+  .rowgrid { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .rowgrid input { flex: 1; }
+  .btndel {
+    background: none; border: none; color: #c33; font-size: 16px; cursor: pointer; padding: 4px 8px;
+  }
+  .btn {
+    display: inline-block; padding: 8px 18px; border-radius: 6px; border: 1px solid #1a5eb8;
+    background: #fff; color: #1a5eb8; font-size: 14px; cursor: pointer; margin-top: 10px;
+  }
+  .btn:hover { background: #eef4fc; }
+  .btn.primary { background: #1a5eb8; color: #fff; }
+  .btn.primary:hover { background: #144890; }
+  .btn.small { padding: 3px 10px; font-size: 12px; margin-top: 0; }
+
+  /* Tree editor */
+  .tree { margin-top: 8px; }
+  .tnode { margin: 4px 0 4px 0; }
+  .tnode .trow { display: flex; gap: 6px; align-items: center; }
+  .tnode .trow input { flex: 1; }
+  .tkids { margin-left: 26px; border-left: 2px solid #e2e8f0; padding-left: 10px; }
+
+  /* Step editor */
+  .stepbox { border: 1px solid #dde3ec; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; background: #fafbfd; }
+  .stepbox .stephead { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+  .stepbox .stephead .stitle { font-weight: bold; color: #1a4f9c; }
+
+  /* Bottom navigation */
+  #navbar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #dde3ec; padding: 10px; }
+  #navbar .inner { max-width: 880px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+  .navmid { display: flex; align-items: center; gap: 10px; }
+  .navmid #draftStatus { font-size: 12px; color: #999; }
+  #navbar button { padding: 10px 26px; }
+
+  /* Preview */
+  pre.preview {
+    background: #f7f8fa; border: 1px solid #e2e6ec; border-radius: 8px; padding: 16px;
+    font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 480px; overflow: auto;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .warn { color: #b06000; font-size: 13px; margin: 10px 0; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>SOP Template Builder</h1>
+  <div class="sub">Fill in each section of a fixed skeleton · Export sop.md with one click when done</div>
+  <div id="progress"></div>
+  <div id="stepArea"></div>
+</div>
+<div id="navbar" class="hide">
+  <div class="inner">
+    <button class="btn" id="btnPrev">Previous</button>
+    <div class="navmid">
+      <button class="btn small" id="btnSave">Save Draft</button>
+      <span id="draftStatus"></span>
+      <button class="btn small" id="btnClear">Clear Draft</button>
+    </div>
+    <button class="btn primary" id="btnNext">Next</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Configuration ---------- */
+
+var SECTIONS = [
+  { id:"head",      title:"Document Header",   required:true,  kind:"head" },
+  { id:"purpose",   title:"Purpose",           required:true,  kind:"text" },
+  { id:"basis",     title:"References",        required:true,  kind:"rows",  cols:["Document Name","Number"] },
+  { id:"scope",     title:"Scope",             required:true,  kind:"text" },
+  { id:"duty",      title:"Roles & Responsibilities", required:true, kind:"rows", cols:["Role / Department","Responsibilities"] },
+  { id:"terms",     title:"Definitions",       required:false, kind:"rows",  cols:["Term","Definition"] },
+  { id:"overview",  title:"Process Overview",  required:false, kind:"lines" },
+  { id:"steps",     title:"Procedure Steps",   required:true,  kind:"steps" },
+  { id:"exception", title:"Exception Handling",required:false, kind:"rows",  cols:["Exception","How to Handle"] },
+  { id:"files",     title:"Related Documents", required:true,  kind:"rows",  cols:["Form / Attachment","Number / Notes"] },
+  { id:"record",    title:"Records",           required:true,  kind:"rows",  cols:["Record","Completed by","How Completed / Stored","Retention"] },
+  { id:"revision",  title:"Revision History",  required:true,  kind:"rows",  cols:["Version","Date","Changes","Revised by"] }
+];
+
+/* ---------- State (not persisted) ---------- */
+var state = {
+  cur: 0, /* 0..11 are sections, 12 is the finish page */
+  head: { line:"", item:"", ver:"", date:"", author:"", reviewer:"", approver:"" },
+  text: {},          /* text/lines section content */
+  rows: {},          /* rows section content: 2D arrays */
+  steps: [ newStep() ]
+};
+
+/* ---------- Draft auto-save (browser-local only) ---------- */
+var DRAFT_KEY = "sop_draft_v1";
+(function(){
+  try{
+    if(typeof localStorage === "undefined") return;
+    var raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return;
+    var saved = JSON.parse(raw);
+    if(saved && typeof saved === "object"){
+      state = saved;
+      if(!state.head || typeof state.head !== "object") state.head = { line:"", item:"", ver:"", date:"", author:"", reviewer:"", approver:"" };
+      if(!state.text || typeof state.text !== "object") state.text = {};
+      if(!state.rows || typeof state.rows !== "object") state.rows = {};
+      if(!state.steps || !state.steps.length) state.steps = [ newStep() ];
+      if(typeof state.cur !== "number" || state.cur < 0 || state.cur > SECTIONS.length) state.cur = 0;
+    }
+  }catch(e){}
+})();
+
+var draftDirty = false;
+function saveDraft(){
+  try{
+    if(typeof localStorage === "undefined") return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+    draftDirty = false;
+    var el = document.getElementById("draftStatus");
+    if(el){
+      var d = new Date();
+      el.textContent = "Saved " + ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2);
+    }
+  }catch(e){}
+}
+if(typeof document !== "undefined" && document.addEventListener){
+  document.addEventListener("input", function(){ draftDirty = true; });
+}
+if(typeof window !== "undefined" && window.addEventListener){
+  window.addEventListener("beforeunload", function(e){
+    if(draftDirty){ e.preventDefault(); e.returnValue = ""; }
+  });
+}
+
+function newStep(){
+  return { title:"", text:"", tree:[], hasTree:false };
+}
+function newTreeNode(){ return { text:"", children:[] }; }
+
+/* ---------- Utilities ---------- */
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function mdCell(s){ return String(s==null?"":s).replace(/\|/g,"\\|").replace(/\n/g," ").trim(); }
+
+/* ---------- Fill detection ---------- */
+function sectionFilled(sec){
+  if(sec.kind==="head"){ return !!(state.head.item && state.head.item.trim()); }
+  if(sec.kind==="text"){ return !!(state.text[sec.id] && state.text[sec.id].trim()); }
+  if(sec.kind==="lines"){
+    var t = state.text[sec.id]||"";
+    return t.split("\n").some(function(l){ return l.trim(); });
+  }
+  if(sec.kind==="rows"){
+    var rs = state.rows[sec.id]||[];
+    return rs.some(function(r){ return r.some(function(c){ return c && c.trim(); }); });
+  }
+  if(sec.kind==="steps"){
+    return state.steps.some(function(st){ return (st.title&&st.title.trim()) || (st.text&&st.text.trim()) || treeHasText(st.tree); });
+  }
+  return false;
+}
+function treeHasText(nodes){
+  for(var i=0;i<nodes.length;i++){
+    if(nodes[i].text && nodes[i].text.trim()) return true;
+    if(treeHasText(nodes[i].children)) return true;
+  }
+  return false;
+}
+
+/* ---------- Rendering ---------- */
+
+function render(){
+  renderProgress();
+  var area = $("stepArea");
+  area.innerHTML = "";
+  if(state.cur < SECTIONS.length){ renderSection(SECTIONS[state.cur], area); }
+  else { renderFinal(area); }
+  $("navbar").classList.remove("hide");
+  $("btnPrev").style.visibility = state.cur===0 ? "hidden" : "visible";
+  $("btnNext").textContent = state.cur < SECTIONS.length ? "Next" : "Back to Edit";
+  $("btnNext").classList.toggle("primary", state.cur < SECTIONS.length);
+}
+
+function renderProgress(){
+  var p = $("progress");
+  p.innerHTML = "";
+  SECTIONS.forEach(function(s,i){
+    var c = document.createElement("span");
+    var miss = s.required && !sectionFilled(s) && i!==state.cur;
+    c.className = "chip" + (i===state.cur?" cur":(sectionFilled(s)?" done":(miss?" miss":""))) + (s.required?"":" opt");
+    c.textContent = (i+1)+". "+s.title + (s.required?"":" (opt)");
+    c.onclick = function(){ state.cur = i; render(); };
+    p.appendChild(c);
+  });
+  var f = document.createElement("span");
+  f.className = "chip" + (state.cur===SECTIONS.length?" cur":"");
+  f.textContent = "Finish & Export";
+  f.onclick = function(){ state.cur = SECTIONS.length; render(); };
+  p.appendChild(f);
+}
+
+/* ---------- Section renderers ---------- */
+function renderSection(sec, area){
+  var card = document.createElement("div");
+  card.className = "card";
+  var h = document.createElement("h2");
+  h.innerHTML = esc(sec.title) + (sec.required ? '<span class="req">Required</span>' : '<span class="req" style="color:#888">Optional, may skip</span>');
+  card.appendChild(h);
+
+  if(sec.kind==="head") renderHead(card);
+  else if(sec.kind==="text" || sec.kind==="lines") renderText(sec, card);
+  else if(sec.kind==="rows") renderRows(sec, card);
+  else if(sec.kind==="steps") renderSteps(sec, card);
+
+  area.appendChild(card);
+}
+
+function mkLabel(txt){
+  var l = document.createElement("label"); l.textContent = txt; return l;
+}
+function mkInput(value, oninput, type){
+  var i = document.createElement("input");
+  i.type = type||"text"; i.value = value||"";
+  i.addEventListener("input", function(){ oninput(i.value); });
+  return i;
+}
+function mkTextarea(value, oninput, ph){
+  var t = document.createElement("textarea");
+  t.value = value||"";
+  t.addEventListener("input", function(){ oninput(t.value); });
+  return t;
+}
+
+/* Document header */
+function renderHead(card){
+  var hd = state.head;
+  var wrap = document.createElement("div");
+
+  wrap.appendChild(mkLabel("Business Line"));
+  var lineInput = mkInput(hd.line, function(v){ hd.line=v; });
+  wrap.appendChild(lineInput);
+
+  var g1 = document.createElement("div"); g1.className="inline-inputs"; g1.style.marginTop="14px";
+  var d1 = document.createElement("div"); d1.appendChild(mkLabel("Process Name"));
+  d1.appendChild(mkInput(hd.item, function(v){ hd.item=v; }));
+  var d2 = document.createElement("div"); d2.appendChild(mkLabel("Version"));
+  d2.appendChild(mkInput(hd.ver, function(v){ hd.ver=v; }));
+  g1.appendChild(d1); g1.appendChild(d2);
+
+  var g2 = document.createElement("div"); g2.className="inline-inputs";
+  var d3 = document.createElement("div"); d3.appendChild(mkLabel("Effective Date"));
+  var dateInp = mkInput(hd.date, function(v){ hd.date=v; });
+  dateInp.placeholder = "YYYY-MM-DD";
+  d3.appendChild(dateInp);
+  var d4 = document.createElement("div"); d4.appendChild(mkLabel("Prepared by"));
+  d4.appendChild(mkInput(hd.author, function(v){ hd.author=v; }));
+  var d5 = document.createElement("div"); d5.appendChild(mkLabel("Reviewed by"));
+  d5.appendChild(mkInput(hd.reviewer, function(v){ hd.reviewer=v; }));
+  g2.appendChild(d3); g2.appendChild(d4); g2.appendChild(d5);
+
+  var g3 = document.createElement("div"); g3.className="inline-inputs";
+  var d6 = document.createElement("div"); d6.appendChild(mkLabel("Approved by"));
+  d6.appendChild(mkInput(hd.approver, function(v){ hd.approver=v; }));
+  g3.appendChild(d6);
+
+  wrap.appendChild(g1); wrap.appendChild(g2); wrap.appendChild(g3);
+  card.appendChild(wrap);
+}
+
+/* Text / one item per line */
+function renderText(sec, card){
+  card.appendChild(mkTextarea(state.text[sec.id]||"", function(v){ state.text[sec.id]=v; }));
+}
+
+/* Row editor (table-type sections) */
+function renderRows(sec, card){
+  var rs = state.rows[sec.id];
+  if(!rs){ rs = [ new Array(sec.cols.length).fill("") ]; state.rows[sec.id] = rs; }
+  var box = document.createElement("div");
+
+  function redraw(){
+    box.innerHTML = "";
+    var headg = document.createElement("div"); headg.className="rowgrid";
+    sec.cols.forEach(function(cn){
+      var sp = document.createElement("span");
+      sp.style.flex="1"; sp.style.fontWeight="bold"; sp.style.fontSize="13px"; sp.style.color="#1a4f9c";
+      sp.textContent = cn;
+      headg.appendChild(sp);
+    });
+    var hsp = document.createElement("span"); hsp.style.width="100px";
+    headg.appendChild(hsp);
+    box.appendChild(headg);
+    rs.forEach(function(row, ri){
+      var g = document.createElement("div"); g.className="rowgrid";
+      row.forEach(function(cell, ci){
+        var inp = mkInput(cell, function(v){ rs[ri][ci]=v; });
+        g.appendChild(inp);
+      });
+      var up = document.createElement("button"); up.className="btndel"; up.textContent="↑"; up.title="Move up";
+      if(ri>0){ up.onclick = function(){ var tmp=rs[ri-1]; rs[ri-1]=rs[ri]; rs[ri]=tmp; redraw(); }; }
+      else { up.style.visibility="hidden"; }
+      g.appendChild(up);
+      var down = document.createElement("button"); down.className="btndel"; down.textContent="↓"; down.title="Move down";
+      if(ri<rs.length-1){ down.onclick = function(){ var tmp=rs[ri+1]; rs[ri+1]=rs[ri]; rs[ri]=tmp; redraw(); }; }
+      else { down.style.visibility="hidden"; }
+      g.appendChild(down);
+      var del = document.createElement("button"); del.className="btndel"; del.textContent="✕"; del.title="Delete this row";
+      del.onclick = function(){ rs.splice(ri,1); if(!rs.length) rs.push(new Array(sec.cols.length).fill("")); redraw(); };
+      g.appendChild(del);
+      box.appendChild(g);
+    });
+    var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add row";
+    add.onclick = function(){ rs.push(new Array(sec.cols.length).fill("")); redraw(); };
+    box.appendChild(add);
+  }
+  redraw();
+  card.appendChild(box);
+}
+
+/* Procedure steps */
+function renderSteps(sec, card){
+  var box = document.createElement("div");
+  function redraw(){
+    box.innerHTML = "";
+    state.steps.forEach(function(st, si){
+      var sb = document.createElement("div"); sb.className="stepbox";
+
+      var head = document.createElement("div"); head.className="stephead";
+      var t = document.createElement("span"); t.className="stitle"; t.textContent = "Step " + (si+1);
+      head.appendChild(t);
+      var up = document.createElement("button"); up.className="btndel"; up.textContent="↑"; up.title="Move up";
+      if(si>0){ up.onclick = function(){ var tmp=state.steps[si-1]; state.steps[si-1]=state.steps[si]; state.steps[si]=tmp; redraw(); }; }
+      else { up.style.visibility="hidden"; }
+      head.appendChild(up);
+      var down = document.createElement("button"); down.className="btndel"; down.textContent="↓"; down.title="Move down";
+      if(si<state.steps.length-1){ down.onclick = function(){ var tmp=state.steps[si+1]; state.steps[si+1]=state.steps[si]; state.steps[si]=tmp; redraw(); }; }
+      else { down.style.visibility="hidden"; }
+      head.appendChild(down);
+      var spacer = document.createElement("span"); spacer.style.flex="1"; head.appendChild(spacer);
+      var del = document.createElement("button"); del.className="btndel"; del.textContent="✕ Delete step";
+      del.onclick = function(){ state.steps.splice(si,1); if(!state.steps.length) state.steps.push(newStep()); redraw(); };
+      head.appendChild(del);
+      sb.appendChild(head);
+
+      var title = mkInput(st.title, function(v){ st.title=v; });
+      sb.appendChild(title);
+
+      sb.appendChild(mkTextarea(st.text, function(v){ st.text=v; }));
+
+      if(st.hasTree && !st.tree.length){ st.hasTree=false; }
+      if(st.hasTree){
+        var treeBox = document.createElement("div"); treeBox.className="tree";
+        renderTree(st.tree, treeBox, function(){ redraw(); });
+        sb.appendChild(treeBox);
+        var bt = document.createElement("div");
+        var delTree = document.createElement("button"); delTree.className="btn small"; delTree.textContent="－ Remove hierarchy";
+        delTree.style.marginLeft="8px";
+        delTree.onclick = function(){ st.hasTree=false; st.tree=[]; redraw(); };
+        bt.appendChild(delTree);
+        sb.appendChild(bt);
+      } else {
+        var addTree = document.createElement("button"); addTree.className="btn small"; addTree.textContent="＋ Add hierarchy";
+        addTree.onclick = function(){ st.hasTree=true; st.tree=[newTreeNode()]; redraw(); };
+        sb.appendChild(addTree);
+      }
+      box.appendChild(sb);
+    });
+    var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add step";
+    add.onclick = function(){ state.steps.push(newStep()); redraw(); };
+    box.appendChild(add);
+  }
+  redraw();
+  card.appendChild(box);
+}
+
+/* Tree editor (recursive) */
+function renderTree(nodes, container, onchange){
+  nodes.forEach(function(nd, ni){
+    var w = document.createElement("div"); w.className="tnode";
+    var row = document.createElement("div"); row.className="trow";
+    var inp = mkInput(nd.text, function(v){ nd.text=v; });
+    row.appendChild(inp);
+    var bUp = document.createElement("button"); bUp.className="btndel"; bUp.textContent="↑"; bUp.title="Move up";
+    if(ni>0){ bUp.onclick = function(){ var tmp=nodes[ni-1]; nodes[ni-1]=nodes[ni]; nodes[ni]=tmp; onchange(); }; }
+    else { bUp.style.visibility="hidden"; }
+    row.appendChild(bUp);
+    var bDown = document.createElement("button"); bDown.className="btndel"; bDown.textContent="↓"; bDown.title="Move down";
+    if(ni<nodes.length-1){ bDown.onclick = function(){ var tmp=nodes[ni+1]; nodes[ni+1]=nodes[ni]; nodes[ni]=tmp; onchange(); }; }
+    else { bDown.style.visibility="hidden"; }
+    row.appendChild(bDown);
+    var bAdd = document.createElement("button"); bAdd.className="btn small"; bAdd.textContent="＋ Child";
+    bAdd.onclick = function(){ nd.children.push(newTreeNode()); onchange(); };
+    row.appendChild(bAdd);
+    var bSib = document.createElement("button"); bSib.className="btn small"; bSib.textContent="＋ Sibling"; bSib.title="Add an item at the same level below";
+    bSib.onclick = function(){ nodes.splice(ni+1,0,newTreeNode()); onchange(); };
+    row.appendChild(bSib);
+    var bDel = document.createElement("button"); bDel.className="btndel"; bDel.textContent="✕"; bDel.title="Delete";
+    bDel.onclick = function(){ nodes.splice(ni,1); onchange(); };
+    row.appendChild(bDel);
+    w.appendChild(row);
+    if(nd.children && nd.children.length){
+      var kids = document.createElement("div"); kids.className="tkids";
+      renderTree(nd.children, kids, onchange);
+      w.appendChild(kids);
+    }
+    container.appendChild(w);
+  });
+}
+
+/* ---------- Finish page ---------- */
+
+function renderFinal(area){
+  var previewMd = buildMD();
+  var card = document.createElement("div");
+  card.className = "card";
+  var h = document.createElement("h2"); h.textContent = "Done · Export"; card.appendChild(h);
+
+  var missing = SECTIONS.filter(function(s){ return s.required && !sectionFilled(s); }).map(function(s){ return s.title; });
+  var warn = document.createElement("div"); warn.className = "warn";
+  if(missing.length){
+    warn.textContent = "The following required sections are not yet filled: " + missing.join(", ") + ". Empty sections will be skipped in the export — consider going back to complete them.";
+  } else {
+    warn.style.color = "#2a8a3a";
+    warn.textContent = "All required sections are filled. Ready to export.";
+  }
+  card.appendChild(warn);
+
+  var lbl = mkLabel("Markdown Preview");
+  card.appendChild(lbl);
+  var pre = document.createElement("pre"); pre.className="preview";
+  pre.textContent = previewMd;
+  card.appendChild(pre);
+
+  var btns = document.createElement("div");
+  var dl = document.createElement("button"); dl.className="btn primary"; dl.textContent="⬇ Export sop.md";
+  dl.onclick = function(){
+    var md = buildMD();
+    var miss2 = SECTIONS.filter(function(s){ return s.required && !sectionFilled(s); }).map(function(s){ return s.title; });
+    if(miss2.length && !confirm("The following required sections are not yet filled: "+miss2.join(", ")+"\nExport anyway?")) return;
+    var blob = new Blob([md], {type:"text/markdown;charset=utf-8"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "sop.md";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
+  };
+  btns.appendChild(dl);
+  card.appendChild(btns);
+  area.appendChild(card);
+}
+
+/* ---------- Markdown generation ---------- */
+function buildMD(){
+  var L = [];
+  var hd = state.head;
+  var itemName = (hd.item && hd.item.trim()) ? hd.item.trim() : "Untitled Process";
+  var lineName = hd.line || "";
+
+  L.push("# " + itemName + " — Standard Operating Procedure (SOP)");
+  L.push("");
+
+  /* Document header table */
+  var headRows = [
+    ["Business Line", lineName], ["Process Name", hd.item], ["Version", hd.ver], ["Effective Date", hd.date],
+    ["Prepared by", hd.author], ["Reviewed by", hd.reviewer], ["Approved by", hd.approver]
+  ].filter(function(r){ return r[1] && String(r[1]).trim(); });
+  if(headRows.length){
+    L.push("| Item | Content |"); L.push("|---|---|");
+    headRows.forEach(function(r){ L.push("| " + mdCell(r[0]) + " | " + mdCell(r[1]) + " |"); });
+    L.push("");
+  }
+
+  var no = 0;
+  SECTIONS.forEach(function(sec){
+    if(sec.kind==="head") return; /* header already emitted above */
+    if(!sec.required && !sectionFilled(sec)) return;
+    no++;
+    L.push("---");
+    L.push("");
+    L.push("## " + no + ". " + sec.title);
+    L.push("");
+    var id = sec.id;
+
+    if(sec.kind==="text"){
+      var t = (state.text[id]||"").trim();
+      if(t) L.push(t);
+    }
+    else if(sec.kind==="lines"){
+      var ln = 0;
+      (state.text[id]||"").split("\n").forEach(function(line){
+        if(line.trim()){ ln++; L.push(ln + ". " + line.trim()); }
+      });
+    }
+    else if(sec.kind==="rows"){
+      var rs = (state.rows[id]||[]).filter(function(r){ return r.some(function(c){ return c && c.trim(); }); });
+      if(rs.length){
+        L.push("| " + sec.cols.map(mdCell).join(" | ") + " |");
+        L.push("|" + sec.cols.map(function(){ return "---"; }).join("|") + "|");
+        rs.forEach(function(r){
+          L.push("| " + r.map(mdCell).join(" | ") + " |");
+        });
+      }
+    }
+    else if(sec.kind==="steps"){
+      var sn = 0;
+      state.steps.forEach(function(st){
+        var has = (st.title&&st.title.trim()) || (st.text&&st.text.trim()) || treeHasText(st.tree);
+        if(!has) return;
+        sn++;
+        L.push("### Step " + sn + ": " + (st.title&&st.title.trim() ? st.title.trim() : "(untitled)"));
+        L.push("");
+        if(st.text && st.text.trim()){
+          L.push(st.text.trim());
+        }
+        if(treeHasText(st.tree)){
+          treeToMd(st.tree, 0, L);
+        }
+        L.push("");
+      });
+    }
+
+    L.push("");
+  });
+  L.push("");
+  L.push("---");
+
+  /* Collapse consecutive blank lines */
+  var out = [];
+  L.forEach(function(line){
+    if(line==="" && out.length && out[out.length-1]==="") return;
+    out.push(line);
+  });
+  return out.join("\n").replace(/\n+$/,"") + "\n\n> Review this document every 12 months, or update it promptly whenever policies change.\n";
+}
+
+function treeToMd(nodes, depth, L){
+  nodes.forEach(function(nd){
+    var t = nd.text && nd.text.trim();
+    if(t) L.push(new Array(depth+1).join("  ") + "- " + t);
+    if(nd.children && nd.children.length) treeToMd(nd.children, t ? depth+1 : depth, L);
+  });
+}
+
+/* ---------- Navigation ---------- */
+$("btnSave").onclick = saveDraft;
+$("btnPrev").onclick = function(){
+  if(state.cur>0){ state.cur--; render(); }
+};
+$("btnNext").onclick = function(){
+  if(state.cur < SECTIONS.length){ state.cur++; render(); }
+  else { state.cur = 0; render(); }
+};
+$("btnClear").onclick = function(){
+  if(!confirm("Clear all entered content and start over?")) return;
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  var stEl = document.getElementById("draftStatus");
+  if(stEl) stEl.textContent = "";
+  draftDirty = false;
+  state = {
+    cur: 0,
+    head: { line:"", item:"", ver:"", date:"", author:"", reviewer:"", approver:"" },
+    text: {}, rows: {},
+    steps: [ newStep() ]
+  };
+  render();
+};
+
+render();
+</script>
+</body>
+</html>
