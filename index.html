@@ -82,6 +82,7 @@
   }
   .warn { color: #b06000; font-size: 13px; margin: 10px 0; }
   .hide { display: none; }
+  @media print { #navbar, #progress { display: none !important; } body { background: #fff; } .card { box-shadow: none; } }
 </style>
 </head>
 <body>
@@ -153,6 +154,7 @@ var DRAFT_KEY = "sop_draft_v1";
 
 var draftDirty = false;
 var _autoT = null;
+var _lastFk = null;
 function saveDraft(){
   try{
     if(typeof localStorage === "undefined") return;
@@ -163,13 +165,22 @@ function saveDraft(){
       var d = new Date();
       el.textContent = "Saved " + ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2);
     }
-  }catch(e){}
+  }catch(e){
+    var el2 = document.getElementById("draftStatus");
+    if(el2) el2.textContent = "Save failed (browser storage blocked)";
+  }
+}
+function scheduleSave(){
+  draftDirty = true;
+  if(_autoT) clearTimeout(_autoT);
+  _autoT = setTimeout(saveDraft, 2000); /* auto-save 2s after last change */
 }
 if(typeof document !== "undefined" && document.addEventListener){
-  document.addEventListener("input", function(){
-    draftDirty = true;
-    if(_autoT) clearTimeout(_autoT);
-    _autoT = setTimeout(saveDraft, 2000); /* auto-save 2s after last keystroke */
+  document.addEventListener("input", scheduleSave);
+  document.addEventListener("click", scheduleSave); /* structural changes too */
+  document.addEventListener("focusin", function(e){
+    var t = e.target;
+    if(t && t.dataset && t.dataset.fk) _lastFk = t.dataset.fk;
   });
 }
 if(typeof window !== "undefined" && window.addEventListener){
@@ -186,7 +197,15 @@ function newTreeNode(){ return { text:"", children:[] }; }
 /* ---------- Utilities ---------- */
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-function mdCell(s){ return String(s==null?"":s).replace(/\|/g,"\\|").replace(/\n/g," ").trim(); }
+function mdCell(s){ return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/\|/g,"\\|").replace(/\n/g," ").trim(); }
+function _restoreFocus(box, fk){
+  if(!fk) return;
+  var el = box.querySelector('[data-fk="'+fk+'"]');
+  if(el){
+    el.focus();
+    try{ el.setSelectionRange(el.value.length, el.value.length); }catch(e){}
+  }
+}
 
 /* ---------- Fill detection ---------- */
 function sectionFilled(sec){
@@ -216,6 +235,7 @@ function treeHasText(nodes){
 /* ---------- Rendering ---------- */
 
 function render(){
+  _lastFk = null;
   renderProgress();
   var area = $("stepArea");
   area.innerHTML = "";
@@ -283,8 +303,7 @@ function renderHead(card){
   var wrap = document.createElement("div");
 
   wrap.appendChild(mkLabel("Business Line"));
-  var lineInput = mkInput(hd.line, function(v){ hd.line=v; });
-  wrap.appendChild(lineInput);
+  wrap.appendChild(mkInput(hd.line, function(v){ hd.line=v; }));
 
   var g1 = document.createElement("div"); g1.className="inline-inputs"; g1.style.marginTop="14px";
   var d1 = document.createElement("div"); d1.appendChild(mkLabel("Process Name"));
@@ -325,6 +344,7 @@ function renderRows(sec, card){
   var box = document.createElement("div");
 
   function redraw(){
+    var fk = _lastFk;
     box.innerHTML = "";
     var headg = document.createElement("div"); headg.className="rowgrid";
     sec.cols.forEach(function(cn){
@@ -340,6 +360,7 @@ function renderRows(sec, card){
       var g = document.createElement("div"); g.className="rowgrid";
       row.forEach(function(cell, ci){
         var inp = mkInput(cell, function(v){ rs[ri][ci]=v; });
+        inp.dataset.fk = "r:"+sec.id+":"+ri+":"+ci;
         g.appendChild(inp);
       });
       var up = document.createElement("button"); up.className="btndel"; up.textContent="↑"; up.title="Move up";
@@ -358,6 +379,7 @@ function renderRows(sec, card){
     var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add row";
     add.onclick = function(){ rs.push(new Array(sec.cols.length).fill("")); redraw(); };
     box.appendChild(add);
+    _restoreFocus(box, fk);
   }
   redraw();
   card.appendChild(box);
@@ -367,6 +389,7 @@ function renderRows(sec, card){
 function renderSteps(sec, card){
   var box = document.createElement("div");
   function redraw(){
+    var fk = _lastFk;
     box.innerHTML = "";
     state.steps.forEach(function(st, si){
       var sb = document.createElement("div"); sb.className="stepbox";
@@ -389,14 +412,17 @@ function renderSteps(sec, card){
       sb.appendChild(head);
 
       var title = mkInput(st.title, function(v){ st.title=v; });
+      title.dataset.fk = "s:"+si+":title";
       sb.appendChild(title);
 
-      sb.appendChild(mkTextarea(st.text, function(v){ st.text=v; }));
+      var body = mkTextarea(st.text, function(v){ st.text=v; });
+      body.dataset.fk = "s:"+si+":text";
+      sb.appendChild(body);
 
       if(st.hasTree && !st.tree.length){ st.hasTree=false; }
       if(st.hasTree){
         var treeBox = document.createElement("div"); treeBox.className="tree";
-        renderTree(st.tree, treeBox, function(){ redraw(); });
+        renderTree(st.tree, treeBox, function(){ redraw(); }, "t:"+si+":");
         sb.appendChild(treeBox);
         var bt = document.createElement("div");
         var delTree = document.createElement("button"); delTree.className="btn small"; delTree.textContent="－ Remove hierarchy";
@@ -414,17 +440,19 @@ function renderSteps(sec, card){
     var add = document.createElement("button"); add.className="btn small"; add.textContent="＋ Add step";
     add.onclick = function(){ state.steps.push(newStep()); redraw(); };
     box.appendChild(add);
+    _restoreFocus(box, fk);
   }
   redraw();
   card.appendChild(box);
 }
 
 /* Tree editor (recursive) */
-function renderTree(nodes, container, onchange){
+function renderTree(nodes, container, onchange, fkBase){
   nodes.forEach(function(nd, ni){
     var w = document.createElement("div"); w.className="tnode";
     var row = document.createElement("div"); row.className="trow";
     var inp = mkInput(nd.text, function(v){ nd.text=v; });
+    inp.dataset.fk = fkBase + ni;
     row.appendChild(inp);
     var bUp = document.createElement("button"); bUp.className="btndel"; bUp.textContent="↑"; bUp.title="Move up";
     if(ni>0){ bUp.onclick = function(){ var tmp=nodes[ni-1]; nodes[ni-1]=nodes[ni]; nodes[ni]=tmp; onchange(); }; }
@@ -446,7 +474,7 @@ function renderTree(nodes, container, onchange){
     w.appendChild(row);
     if(nd.children && nd.children.length){
       var kids = document.createElement("div"); kids.className="tkids";
-      renderTree(nd.children, kids, onchange);
+      renderTree(nd.children, kids, onchange, fkBase + ni + "-");
       w.appendChild(kids);
     }
     container.appendChild(w);
@@ -483,10 +511,11 @@ function renderFinal(area){
     var md = buildMD();
     var miss2 = SECTIONS.filter(function(s){ return s.required && !sectionFilled(s); }).map(function(s){ return s.title; });
     if(miss2.length && !confirm("The following required sections are not yet filled: "+miss2.join(", ")+"\nExport anyway?")) return;
+    var fname = (state.head.item && state.head.item.trim()) ? state.head.item.trim().replace(/[\\/:*?"<>|]/g,"_").slice(0,60) + ".md" : "sop.md";
     var blob = new Blob([md], {type:"text/markdown;charset=utf-8"});
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "sop.md";
+    a.download = fname;
     document.body.appendChild(a); a.click();
     setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
   };

@@ -54,6 +54,11 @@ The following belong to a full controlled-document system, and this template int
 
 If you ever outgrow "single author, single file" and move to multi-author, controlled release, the skeleton already has room: add document numbering and classification, step-level owners and deadlines, a separate attachments section, and approver/effective-date columns in revision history. Add sections — no need to rebuild.
 
+## Known limitations (by design)
+
+- One draft at a time — to start a fresh SOP, export the current one first, then use **Clear Draft**
+- Drafts live only in your browser's localStorage; there's no project-file import/export. Switching machines? Export the Markdown and work from that
+
 ## The quality test
 
 The tool guarantees structural completeness — nothing missing, nothing skipped. **Content quality depends on the author.** The hard self-check:
